@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset='utf-8'>
+        <link href='/images/favicon.png' rel='shortcut icon'>
+        <link href='/css/fullcalendar.css' rel='stylesheet'>
+        <link href='/css/Chart.min.css' rel='stylesheet'>
+        <script src='/js/moment.min.js'></script>
+        <script src='/scripts/jquery/jquery.min.js'></script>
+        <script src='/js/fullcalendar.js'></script>
+        <script src="/js/Chart.bundle.min.js"></script>
+        <script src="/scripts/socket.io/socket.io.js"></script>
+        <script>
+            var port = <%= port; %>;
+            var host = location.hostname;
+            var socket = io('https://' + host + ':' + port, {
+                secure: true
+            });
+            $(document).ready(function() {
+                socket.emit('sum');
+                socket.on('sum', function(data){
+                    $('#sum').text('$'+(data.toFixed(2) || 0));
+                });
+                socket.emit('events');
+                socket.on('events', function(events){
+                    for(var i = 0; i < events.length; i++){
+                        events[i].start = new Date(Date.parse(events[i].start));
+                        events[i].title = events[i].title + ' ' + parseFloat(events[i].amount).toFixed(2);
+                    }
+                    $('#calendar').fullCalendar({
+                        header: {
+                          left: 'prev,next today',
+                          center: 'title',
+                          right: 'month,agendaWeek,agendaDay,listWeek'
+                        },
+                        height:870,
+                        navLinks: true, // can click day/week names to navigate views
+                        fixedWeekCount: false,
+                        eventLimit: true, // allow "more" link when too many events
+                        events: events
+                    });
+                });
+
+                $('#submit').on('click',function(){
+                    var data = {
+                          title:$('#title').val(),
+                          amount:$('#amount').val(),
+
+                    }
+                    if($('#date').val()){
+                        data.start = $('#date').val()
+                    } else {
+                        data.start = today();
+                    }
+
+                    socket.emit('addEvent', data);
+
+                    socket.on('addEvent', function(data){
+                        location.reload();
+                    });
+                });
+
+                $('#show-graph').on('click',function(){
+                    $('#graph').toggle();
+                    if($('#graph').is(':visible')){
+                        $('#show-graph').text('Hide Graph');
+                    } else {
+                        $('#show-graph').text('Show Graph');
+                    }
+                    $('#calendar').toggle();
+                });
+            });
+        </script>
+        <style>
+
+            body {
+                margin: 0 auto;
+                padding: 0;
+                font-family: sans-serif;
+                font-size: 16px;
+                height:800px !important;
+            }
+
+            #calendar {
+                margin: 0 auto;
+                width:100%;
+                height:800px !important;
+            }
+
+            #sum {
+                position:absolute;
+                right:15px;
+                top:15px;
+                font:700 50px sans-serif;
+                opacity:.7;
+                color:#555;
+                z-index:1000
+            }
+
+            .fc-past {
+                background:#fff
+            }
+
+            .fc-future {
+                background:#AEF6A6
+            }
+
+        </style>
+    </head>
+    <body>
+        <h2><%= sitename; %></h2>
+        <div id="controls">
+            <input id="title" placeholder="title" autocomplete=off>
+            <input id="amount" placeholder="amount" autocomplete=off>
+            <input id="date" type="datetime-local">
+            <button id="submit">Add Event</button><button id="show-graph">Show Graph</button>
+            <span id="sum"></span>
+        </div>
+        <div id='calendar'></div>
+        <canvas id="graph" style="display:none"></canvas>
+        <script>
+            var ctx = document.getElementById('graph').getContext('2d');
+            var labels = [];
+            var amount = [];
+            var background = [];
+            var border = [];
+            socket.emit('charts', <%= year; %>);
+            socket.on('charts', function(res){
+                console.log(res);
+                for(var i = 0; i < res.length; i++){
+                    labels.push(res[i]._id.title);
+                    amount.push(res[i].amount.toFixed(2));
+                    background.push(color(6));
+                    border.push(color(6));
+                }
+
+                var myChart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            data: amount,
+                            backgroundColor: background,
+                            borderColor: border,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            yAxes: [{
+                                ticks: {
+                                    beginAtZero: true
+                                }
+                            }]
+                        }
+                    }
+                });
+            });
+
+            function color(len){
+                var text = "";
+                var possible = "abcdef0987654";
+                for( var i=0; i < len; i++ )
+                    text += possible.charAt(Math.floor(Math.random() * possible.length));
+                return '#'+text;
+            }
+
+            function today(){
+                var tzoffset = (new Date()).getTimezoneOffset() * 60000; //offset in milliseconds
+                var localISOTime = (new Date(Date.now() - tzoffset)).toISOString();
+                var time = localISOTime.substring(0,19).split('T');
+                return time[0] + ' ' + time[1];
+            }
+
+                function like(haystack,needle){
+                    var str = new String(haystack);
+                    var n = -1;
+                    /// haystack = 'x';
+                    /// needle = ['a','b','c','x'];
+                    for(var i=0;i<needle.length;i++){
+                        n = str.search(needle[i]);/// searches the whole word
+                        if(n > -1){
+                                return n;
+                        }
+                    }
+                    return n;
+                }
+
+        </script>
+    </body>
+</html>
